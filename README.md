@@ -77,13 +77,12 @@ Terminals are "indivisible units of a language", or a token.
 <mailbox> ::= <local-part> "@" <domain>
 <local-part> ::= <string>
 <string> ::= <char> | <char> <string>
-<char> ::= any one of the printable ASCII characters, but not any
-of <special> or <SP>
+<char> ::= any one of the printable ASCII characters, but not any of <special> or <SP>
 <domain> ::= <element> | <element> "." <domain>
 <element> ::= <letter> | <name>
 <name> ::= <letter> <let-dig-str>
-<letter> ::= any one of the 52 alphabetic characters A through Z in upper case
-and a through z in lower case
+<letter> ::= any one of the 52 alphabetic characters A through Z in upper case and a through z in
+lower case
 <let-dig-str> ::= <let-dig> | <let-dig> <let-dig-str>
 <let-dig> ::= <letter> | <digit>
 <digit> ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"

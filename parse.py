@@ -107,6 +107,20 @@ class Parser:
         """
         return 0 <= ord(char) <= 127
 
+    def is_ascii_printable(self, char: str) -> bool:
+        """
+        Checks if a character is an ASCII printable character.
+        https://www.ascii-code.com/characters/printable-characters
+
+        32 is space. <char> will omit space based on the rule.
+
+        :param self: Description
+        :param char: The character to check.
+        :return: True if the character is ASCII printable, False otherwise.
+        :rtype: bool
+        """
+        return 32 <= ord(char) <= 126
+
     def rewind(self, new_position: int):
         """
         Rewinds the parser's position to a specified index.
@@ -151,8 +165,6 @@ class Parser:
 
         return True
 
-
-
     def whitespace(self):
         """
         Matches one or more <sp> characters. Since this non-terminal does
@@ -190,7 +202,7 @@ class Parser:
         :param self: Description
         """
 
-    def domain(self, starting_position: int = -1) -> bool:
+    def domain(self) -> bool:
         """
         Docstring for domain
 
@@ -199,40 +211,42 @@ class Parser:
         :rtype: bool
         """
 
-        original_position = self.position
-        if starting_position is not None and starting_position >= 0:
-            original_position = starting_position
+        start = self.position
+        original_start = self.position
 
-        print(f"Domain starting position is {original_position}")
         if not self.element():
             print("Domain element failed")
-            self.rewind(original_position)
+            self.rewind(start)
             return False
 
-        original_position = self.position
-        print(f"Domain element succeeded; saved position is {original_position}")
+        # Update the starting position since this succeeded!
+        start = self.position
+
+        print(f"element matched; current position is {self.position}, start: {start}, original_start: {original_start}, char is {self.current_char()}")
+
         if not self.match_chars("."):
             # Since there is no period, rewind and stop here
             print("Domain period not found, rewinding")
-            self.rewind(original_position)
+            self.rewind(start)
             return True
 
-        print(f"Domain period is found; saved position is {original_position}")
+        print(f"Domain period is found; saved position is {start}")
 
         # Since there is a period, see if there is another element. If not,
         # rewind again and return True. We are rewinding to before the period
         # since the period by itself is not enough for the "right-side" of the
         # "or" operator in the <domain> non-terminal. Calling this checks
         # for another element after the period.
-        if not self.domain(original_position):
-            print("Rewinding after failed domain check")
-            self.rewind(original_position)
+        if not self.domain():
+
+            self.rewind(start)
+            print(f"Rewinding after failed domain check; current position is {self.position}, start: {start}")
             return False
 
         return True
 
 
-    def element(self, starting_position: int = -1) -> bool:
+    def element(self) -> bool:
         """
         The function that handles the <element> non-terminal, which is:
         <letter> | <name>
@@ -247,16 +261,14 @@ class Parser:
         :rtype: bool
         """
 
-        original_position = self.position
-        if starting_position is not None and starting_position >= 0:
-            original_position = starting_position
+        start = self.position
 
         if self.name():
             return True
 
         # If name failed, that means there were only 0 or 1 letters. Rewind
         # the cursor so that we can check for <letter>.
-        self.rewind(original_position)
+        self.rewind(start)
         return self.letter()
 
     def name(self):
@@ -314,6 +326,49 @@ class Parser:
             return True
 
         return False
+
+    def is_string(self) -> bool:
+        """
+        Function for the <string> non-terminal. This seems to mean
+        "one or more <char> characters".
+
+        :param self: Description
+        :return: Description
+        :rtype: bool
+        """
+
+        start = self.position
+        if not self.char():
+            self.rewind(start)
+            return False
+
+        while self.char():
+            pass
+
+        return True
+
+    def is_char(self) -> bool:
+        """
+        Returns True if the current character is any ASCII character expect
+        those in <special> or those in <sp>.
+
+        :param self: Description
+        :return: Description
+        :rtype: bool
+        """
+
+        start = self.position
+        if self.special() or self.sp():
+            self.rewind(start)
+            return False
+
+        if not self.is_ascii_printable(self.current_char()):
+            return False
+
+        self.advance()
+        return True
+
+
 
     def sp(self) -> bool:
         """
@@ -392,8 +447,8 @@ if __name__ == "__main__":
             parser = Parser(line)
             print(line)
             # Actually invoke the parser to start with the <mail-from-cmd> non-terminal
-            # parser.mail_from_cmd()
-            parser.domain()
+            parser.mail_from_cmd()
+            # parser.domain()
             # If we reach here, the line was successfully parsed
             print("Sender OK")
         except EOFError:
