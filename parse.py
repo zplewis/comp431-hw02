@@ -85,7 +85,8 @@ class Parser:
     def mail_from_cmd(self):
         """
         The <mail-from-cmd> non-terminal serves as the entry point for the
-        parser.
+        parser. In other words, this non-terminal handles the entire
+        "MAIL FROM:" command.
 
         :param self: Description
         """
@@ -95,6 +96,9 @@ class Parser:
         if not self.match_chars("FROM:"):
             raise ParserError("mail-from-cmd")
         self.nullspace()
+        self.reverse_path()
+        self.nullspace()
+        self.crlf()
 
     def is_ascii(self, char: str) -> bool:
         """
@@ -105,6 +109,9 @@ class Parser:
         :return: True if the character is ASCII, False otherwise.
         :rtype: bool
         """
+        if self.is_at_end():
+            return False
+
         return 0 <= ord(char) <= 127
 
     def is_ascii_printable(self, char: str) -> bool:
@@ -119,6 +126,9 @@ class Parser:
         :return: True if the character is ASCII printable, False otherwise.
         :rtype: bool
         """
+        if self.is_at_end():
+            return False
+
         return 32 <= ord(char) <= 126
 
     def rewind(self, new_position: int):
@@ -202,6 +212,8 @@ class Parser:
         :param self: Description
         """
 
+        return self.is_path()
+
     def domain(self) -> bool:
         """
         Docstring for domain
@@ -215,22 +227,22 @@ class Parser:
         original_start = self.position
 
         if not self.element():
-            print("Domain element failed")
+            # print("Domain element failed")
             self.rewind(start)
             return False
 
         # Update the starting position since this succeeded!
         start = self.position
 
-        print(f"element matched; current position is {self.position}, start: {start}, original_start: {original_start}, char is {self.current_char()}")
+        # print(f"element matched; current position is {self.position}, start: {start}, original_start: {original_start}, char is {self.current_char()}")
 
         if not self.match_chars("."):
             # Since there is no period, rewind and stop here
-            print("Domain period not found, rewinding")
+            # print("Domain period not found, rewinding")
             self.rewind(start)
             return True
 
-        print(f"Domain period is found; saved position is {start}")
+        # print(f"Domain period is found; saved position is {start}")
 
         # Since there is a period, see if there is another element. If not,
         # rewind again and return True. We are rewinding to before the period
@@ -240,7 +252,7 @@ class Parser:
         if not self.domain():
 
             self.rewind(start)
-            print(f"Rewinding after failed domain check; current position is {self.position}, start: {start}")
+            # print(f"Rewinding after failed domain check; current position is {self.position}, start: {start}")
             return False
 
         return True
@@ -269,7 +281,10 @@ class Parser:
         # If name failed, that means there were only 0 or 1 letters. Rewind
         # the cursor so that we can check for <letter>.
         self.rewind(start)
-        return self.letter()
+        if not self.letter():
+            raise ParserError("element")
+
+        return True
 
     def name(self):
         """
@@ -327,6 +342,69 @@ class Parser:
 
         return False
 
+    def is_path(self) -> bool:
+        """
+        Docstring for is_path
+
+        :param self: Description
+        :return: Description
+        :rtype: bool
+        """
+
+        start = self.position
+
+        if not self.match_chars("<"):
+            self.rewind(start)
+            raise ParserError("path")
+
+        if not self.mailbox():
+            self.rewind(start)
+            raise ParserError("path")
+
+        if not self.match_chars(">"):
+            self.rewind(start)
+            raise ParserError("path")
+
+        return True
+
+    def mailbox(self) -> bool:
+        """
+        Function for <mailbox>. Is allowed to generate errors under the error detection rule
+        defined in HW1 writeup.
+
+        :param self: Description
+        :return: Description
+        :rtype: bool
+        """
+
+        start = self.position
+
+        if not self.local_part():
+            self.rewind(start)
+            raise ParserError("mailbox")
+
+        if not self.match_chars("@"):
+            self.rewind(start)
+            raise ParserError("mailbox")
+
+        if not self.domain():
+            self.rewind(start)
+            raise ParserError("mailbox")
+
+        return True
+
+    def local_part(self) -> bool:
+        """
+        Seems to be an alias for <string>.
+
+        :param self: Description
+        :return: Description
+        :rtype: bool
+        """
+
+        return self.is_string()
+
+
     def is_string(self) -> bool:
         """
         Function for the <string> non-terminal. This seems to mean
@@ -338,11 +416,11 @@ class Parser:
         """
 
         start = self.position
-        if not self.char():
+        if not self.is_char():
             self.rewind(start)
-            return False
+            raise ParserError("string")
 
-        while self.char():
+        while self.is_char():
             pass
 
         return True
@@ -367,8 +445,6 @@ class Parser:
 
         self.advance()
         return True
-
-
 
     def sp(self) -> bool:
         """
@@ -419,7 +495,10 @@ class Parser:
         :rtype: bool
         """
         special_chars = set("\n")
-        return self.char_in_set(special_chars)
+        if not self.char_in_set(special_chars):
+            raise ParserError("CRLF")
+
+        return True
 
     def special(self) -> bool:
         """
