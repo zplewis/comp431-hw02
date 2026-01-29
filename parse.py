@@ -1,10 +1,75 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Patrick Lewis for COMP 431 Spring 2026
 HW2: More Baby-steps Towards the Construction of an SMTP Server
 """
 
 import sys
+
+class ParserState:
+    """
+    Class that will operate like a state machine to keep track of what command
+    is being handled next.
+    """
+    # Call parser.mail_from_cmd() first
+    EXPECTING_MAIL_FROM = 0
+    EXPECTING_RCPT_TO = 1
+    EXPECTING_RCPT_TO_OR_DATA = 2
+    EXPECTING_DATA_END = 3
+
+    def __init__(self, parser: Parser = None):
+        self.state = ParserState.EXPECTING_MAIL_FROM
+        self.parser = parser
+        self.email_addresses = []
+        self.email_text = ""
+
+    def get_state(self) -> int:
+        return self.state
+
+    def add_email_address(self):
+        if self.state in (ParserState.EXPECTING_RCPT_TO, ParserState.EXPECTING_RCPT_TO_OR_DATA):
+            email_address = self.parser.get_email_address()
+            self.email_addresses.append(email_address)
+
+    def add_line_to_email(self):
+        # Deal with special lines first
+        if self.state == self.EXPECTING_MAIL_FROM:
+            from_line = self.parser.get_from_line_for_email()
+            self.add_email_address()
+            self.email_text += from_line + "\n"
+            return
+
+        if self.state in (self.EXPECTING_RCPT_TO, self.EXPECTING_RCPT_TO_OR_DATA):
+            # Stop here if we do not read a RCPT TO line
+            to_line = self.parser.get_to_line_for_email()
+            self.add_email_address()
+            self.email_text += to_line + "\n"
+            return
+
+        if self.state == self.EXPECTING_DATA_END and self.parser.rewind() and \
+            self.parser.data_end_cmd():
+            return
+
+        self.email_text += self.parser.input_string + "\n"
+
+    def is_cmd_expected(self) -> bool:
+        return self.state == ParserState.EXPECTING_MAIL_FROM or \
+        self.state == ParserState.EXPECTING_RCPT_TO or \
+        self.state == ParserState.EXPECTING_RCPT_TO_OR_DATA
+
+    def reset(self):
+        self.state = ParserState.EXPECTING_MAIL_FROM
+        self.email_addresses = []
+        self.email_text = ""
+
+    def advance(self):
+        if self.state < ParserState.EXPECTING_DATA_END:
+            self.state += 1
+            return
+
+        self.reset()
+
 
 class ParserError(Exception):
     """
@@ -71,18 +136,68 @@ class Parser:
         """
         The position of the "cursor", like in SQL, of the current character.
         """
-        self.position = 0
+        self.BEGINNING_POSITION = 0
+        self.position = self.BEGINNING_POSITION
         """
         A constant representing when the position has reached the end of the input string.
         """
         self.OUT_OF_BOUNDS = len(input_string)
 
-    def print_success(self):
+    def get_email_address(self) -> str:
+        """
+        Extracts and returns the email address from the input string.
+        """
+
+        start_index = self.input_string.find("<") + 1
+        end_index = self.input_string.find(">", start_index)
+        return self.input_string[start_index:end_index].strip()
+
+
+    def get_address_line_for_email(self, string_literal: str) -> str:
+        """
+        Extracts and returns an address line for email based on the provided
+        string literal ("FROM:" or "TO:") from a command line.
+        """
+
+        if not self.is_at_end() or not string_literal or string_literal not in self.input_string:
+            raise ValueError(f"Input string does not contain '{string_literal}' literal.")
+
+        start_index = self.input_string.find(string_literal) + len(string_literal)
+        end_index = self.input_string.find(">", start_index) + 1
+        return f"{string_literal[:-1].capitalize()}: {self.input_string[start_index:end_index].strip()}"
+
+    def get_from_line_for_email(self) -> str:
+        """
+        Extracts and returns "From: <reverse-path>"from a "MAIL FROM:" command line.
+        Assumes that the line has already been successfully parsed.
+        """
+
+        # I think there is an easy way to do this without rewinding the parser.
+        return self.get_address_line_for_email("FROM:")
+        # from_literal = "FROM:"
+
+        # if not self.is_at_end() or from_literal not in self.input_string:
+        #     raise ValueError("Input string does not contain 'FROM:' literal.")
+
+        # start_index = self.input_string.find(from_literal) + len(from_literal)
+        # end_index = self.input_string.find(">", start_index) + 1
+        # return f"From: {self.input_string[start_index:end_index].strip()}"
+
+    def get_to_line_for_email(self) -> str:
+        """
+        Extracts and returns "To: <forward-path-n>" from a "RCPT TO:" command line.
+        """
+
+        return self.get_address_line_for_email("TO:")
+
+    def print_success(self) -> bool:
         """
         Prints the success message when a line is successfully parsed.
         """
 
         print("250 OK")
+
+        return True
 
     def current_char(self) -> str:
         """
@@ -109,11 +224,13 @@ class Parser:
         """
         return self.position >= self.OUT_OF_BOUNDS
 
-    def mail_from_cmd(self):
+    def mail_from_cmd(self) -> bool:
         """
         The <mail-from-cmd> non-terminal serves as the entry point for the
         parser. In other words, this non-terminal handles the entire
         "MAIL FROM:" command.
+
+        <mail-from-cmd> ::= "MAIL" <whitespace> "FROM:" <nullspace> <reverse-path> <nullspace> <CRLF>
         """
         if not self.match_chars("MAIL"):
             raise ParserError(ParserError.COMMAND_UNRECOGNIZED)
@@ -168,7 +285,11 @@ class Parser:
         # If we reach here, the line was successfully parsed
         print("354 Start mail input; end with <CRLF>.<CRLF>")
 
-        # TODO: Handle the mail input until <CRLF>.<CRLF>
+    def data_read_msg_line(self):
+        """
+        Handles the reading of mail input lines after a successful DATA command.
+        """
+
         # This means to loop until we match <CRLF>.<CRLF>, or until we
         # encounter an invalid character.
         while not (self.crlf() and self.match_chars(".") and self.crlf()):
@@ -180,8 +301,7 @@ class Parser:
                 and not self.crlf()):
                 raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
 
-        # Print 250 OK upon successful completion of mail input
-        self.print_success()
+        return True
 
 
     def data_end_cmd(self):
@@ -190,12 +310,19 @@ class Parser:
         represented by a line containing only a period. Keep in mind that
         <data-cmd> has its own <CRLF> before this non-terminal.
 
-        <data-end-cmd> ::= <CRLF> "." <CRLF>
+        <data-end-cmd> ::= "." <CRLF>
         """
 
-        self.crlf()
-        self.match_chars(".")
-        self.crlf()
+        # The line must begin with a period and nothing else
+        # The beginning of a new line implies <CRLF> as defined by the
+        # production rule.
+        if not self.position == self.BEGINNING_POSITION:
+            return False
+
+        if not (self.match_chars(".") and self.crlf()):
+            return False
+
+        return self.print_success()
 
     def is_ascii(self, char: str) -> bool:
         """
@@ -243,7 +370,7 @@ class Parser:
         self.advance()
         return True
 
-    def rewind(self, new_position: int):
+    def rewind(self, new_position: int) -> bool:
         """
         Rewinds the parser's position to a specified index.
 
@@ -251,11 +378,21 @@ class Parser:
         :param new_position: The position to rewind to.
         """
 
-        if not (0 <= new_position <= self.OUT_OF_BOUNDS):
+        if not (self.BEGINNING_POSITION <= new_position <= self.OUT_OF_BOUNDS):
             raise ValueError(f"""new_position must be within the bounds of the input string.
                              actual: {new_position}, expected: [0, {self.OUT_OF_BOUNDS - 1}]""")
 
         self.position = new_position
+
+        return True
+
+
+    def reset_parser(self):
+        """
+        Resets the parser's position to the beginning of the input string.
+        """
+
+        return self.rewind(self.BEGINNING_POSITION)
 
     def match_chars(self, expected: str) -> bool:
         """
@@ -613,6 +750,9 @@ class Parser:
 
 
 if __name__ == "__main__":
+
+    state = ParserState()
+
     while True:
         try:
             # read one line from standard input
@@ -625,7 +765,8 @@ if __name__ == "__main__":
             parser = Parser(line)
             print(line.strip())
             # Actually invoke the parser to start with the <mail-from-cmd> non-terminal
-            parser.mail_from_cmd()
+            if state == ParserState.EXPECTING_MAIL_FROM and parser.mail_from_cmd():
+                state += 1
 
         except EOFError:
             # Ctrl+D (Unix) or end-of-file from a pipe

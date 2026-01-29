@@ -55,3 +55,8 @@ MAIL FROM:<jeffay@cs>
 MAIL from:<jeffay@cs.unc.edu>
 MAIL FrOM:<jeffay@cs.unc.edu>
 MaIl FrOm:<jeffay@cs.unc.edu>
+MAILFROM: <jeffay@cs.unc.edu>
+RCPT TO : < bob@cs.unc.edu>
+MAIL FROM: <jeffay @cs.unc.edu>
+RCPT TO: < bob@cs.unc.edu
+MAILFROM: <jeffay @cs.unc.edu>
