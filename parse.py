@@ -1,18 +1,46 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-HW1: Parsing in Python
+HW2: More Baby-steps Towards the Construction of an SMTP Server
 """
 
 import sys
 
 class ParserError(Exception):
     """
-    Raised when a parsing error occurs.
+    Raised when a parsing error occurs. With HW2, whenver the first parsed
+    token(s) on an input line do not match the literal string(s) in the
+    production rule for any message in the grammar, a type 500 error message
+    is generated. Operationally, a 500 error means that your parser could not
+    uniquely recognize which SMTP message it should be parsing.
+
+    If the correct message token(s) are recognized (i.e., your parser "knows"
+    what message it's parsing), but some other error occurs on the line, a type
+    501 error message is generated.
     """
-    def __init__(self, nonterminal: str):
-        self.nonterminal = nonterminal
-        super().__init__(f"ERROR -- {nonterminal}")
+    def __init__(self, error_no: int):
+
+        self.COMMAND_UNRECOGNIZED = 500
+        self.SYNTAX_ERROR_IN_PARAMETERS = 501
+        self.BAD_SEQUENCE_OF_COMMANDS = 503
+
+        self.error_no = error_no
+
+        super().__init__(self.get_error_message())
+
+    def get_error_message(self) -> str:
+        """
+        Returns the error message corresponding to the error number.
+        """
+
+        if self.error_no == 501:
+            return "501 Syntax error in parameters or arguments"
+
+        if self.error_no == 503:
+            return "503 Bad sequence of commands"
+
+        # Assume 500 for anything else
+        return "500 Syntax error, command unrecognized"
 
 
 class Parser:
@@ -49,13 +77,16 @@ class Parser:
         """
         self.OUT_OF_BOUNDS = len(input_string)
 
+    def print_success(self):
+        """
+        Prints the success message when a line is successfully parsed.
+        """
+
+        print("250 OK")
+
     def current_char(self) -> str:
         """
         Returns the current character that the parser is looking at.
-
-        :param self: Description
-        :return: Description
-        :rtype: str
         """
 
         if self.position >= self.OUT_OF_BOUNDS:
@@ -65,8 +96,6 @@ class Parser:
     def advance(self):
         """
         Advances the "cursor" for the parser forward by one character.
-
-        :param self: Description
         """
 
         if self.is_at_end():
@@ -77,10 +106,6 @@ class Parser:
     def is_at_end(self) -> bool:
         """
         Returns True if the parser has reached the end of the input string.
-
-        :param self: Description
-        :return: Description
-        :rtype: bool
         """
         return self.position >= self.OUT_OF_BOUNDS
 
@@ -89,17 +114,87 @@ class Parser:
         The <mail-from-cmd> non-terminal serves as the entry point for the
         parser. In other words, this non-terminal handles the entire
         "MAIL FROM:" command.
-
-        :param self: Description
         """
         if not self.match_chars("MAIL"):
-            raise ParserError("mail-from-cmd")
+            raise ParserError(ParserError.COMMAND_UNRECOGNIZED)
         self.whitespace()
         if not self.match_chars("FROM:"):
-            raise ParserError("mail-from-cmd")
+            raise ParserError(ParserError.COMMAND_UNRECOGNIZED)
         self.nullspace()
         self.reverse_path()
         self.nullspace()
+        if not self.crlf():
+            raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
+
+        # If we reach here, the line was successfully parsed
+        self.print_success()
+
+    def rcpt_to_cmd(self):
+        """
+        The <rcpt-to-cmd> non-terminal handles the "RCPT TO:" command.
+
+        <rcpt-to-cmd> ::= "RCPT" <whitespace> "TO:" <nullspace> <forward-path> <nullspace> <CRLF>
+        """
+
+        if not self.match_chars("RCPT"):
+            raise ParserError(ParserError.COMMAND_UNRECOGNIZED)
+        self.whitespace()
+        if not self.match_chars("TO:"):
+            raise ParserError(ParserError.COMMAND_UNRECOGNIZED)
+        self.nullspace()
+        self.forward_path()
+        self.nullspace()
+        if not self.crlf():
+            raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
+
+        # If we reach here, the line was successfully parsed
+        self.print_success()
+
+    def data_cmd(self):
+        """
+        The <data-cmd> non-terminal handles the "DATA" command.
+
+        <data-cmd> ::= "DATA" <nullspace> <CRLF>
+        """
+
+        # This is an example of a literal string in a production rule
+        # If an error occurs here, it is a 500 error
+        if not self.match_chars("DATA"):
+            raise ParserError(ParserError.COMMAND_UNRECOGNIZED)
+        self.nullspace()
+        if not self.crlf():
+            raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
+
+        # If we reach here, the line was successfully parsed
+        print("354 Start mail input; end with <CRLF>.<CRLF>")
+
+        # TODO: Handle the mail input until <CRLF>.<CRLF>
+        # This means to loop until we match <CRLF>.<CRLF>, or until we
+        # encounter an invalid character.
+        while not (self.crlf() and self.match_chars(".") and self.crlf()):
+            # What characters are allowed here?
+            # There are no limits or constraints on what, how much text can be
+            # entered after a correct DATA message other than we'll assume that
+            # text is limited to printable text, whitespace, and newlines.
+            if (not self.match_ascii_printable() and not self.whitespace()
+                and not self.crlf()):
+                raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
+
+        # Print 250 OK upon successful completion of mail input
+        self.print_success()
+
+
+    def data_end_cmd(self):
+        """
+        The <data-end-cmd> non-terminal handles the end of mail input,
+        represented by a line containing only a period. Keep in mind that
+        <data-cmd> has its own <CRLF> before this non-terminal.
+
+        <data-end-cmd> ::= <CRLF> "." <CRLF>
+        """
+
+        self.crlf()
+        self.match_chars(".")
         self.crlf()
 
     def is_ascii(self, char: str) -> bool:
@@ -133,6 +228,21 @@ class Parser:
 
         return 32 <= ord(char) <= 126
 
+    def match_ascii_printable(self) -> bool:
+        """
+        Attempts to match a single ASCII printable character. If it matches,
+        then advance the parser's position by one.
+        """
+
+        if self.is_at_end():
+            return False
+
+        if not self.is_ascii_printable(self.current_char()):
+            return False
+
+        self.advance()
+        return True
+
     def rewind(self, new_position: int):
         """
         Rewinds the parser's position to a specified index.
@@ -149,13 +259,8 @@ class Parser:
 
     def match_chars(self, expected: str) -> bool:
         """
-        Docstring for match_chars
-
-        :param self: Description
-        :param expected: Description
-        :type expected: list[str]
-        :return: Description
-        :rtype: bool
+        Attempts to match a sequence of characters in the input string. This is
+        good for matching fixed strings like "MAIL", "FROM:", "<", ">", etc.
         """
 
         if self.is_at_end():
@@ -182,12 +287,10 @@ class Parser:
         Matches one or more <sp> characters. Since this non-terminal does
         generate a ParserError upon failure, there is no need to return a
         value.
-
-        :param self: Description
         """
 
         if not self.sp():
-            raise ParserError("whitespace")
+            raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
 
         while self.sp():
             pass
@@ -210,19 +313,20 @@ class Parser:
     def reverse_path(self):
         """
         The function that handles the <reverse-path> non-terminal.
-
-        :param self: Description
         """
 
         return self.is_path()
 
+    def forward_path(self):
+        """
+        The function that handles the <forward-path> non-terminal.
+        """
+        return self.is_path()
+
     def domain(self) -> bool:
         """
-        Docstring for domain
-
-        :param self: Description
-        :return: Description
-        :rtype: bool
+        The function that handles the <domain> non-terminal, which is:
+        <domain> ::= <element> | <element> "." <domain>
         """
 
         start = self.position
@@ -284,7 +388,7 @@ class Parser:
         # the cursor so that we can check for <letter>.
         self.rewind(start)
         if not self.letter():
-            raise ParserError("element")
+            raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
 
         return True
 
@@ -292,8 +396,6 @@ class Parser:
         """
         The function that handles the <name> non-terminal, which is:
         <letter> <let-dig-str>
-
-        :param self: Description
         """
 
         return self.letter() and self.let_dig_str()
@@ -303,10 +405,6 @@ class Parser:
         The function that handles the <let-dig-str> non-terminal. This works
         just like the <whitespace> non-terminal, where at least 1 letter or
         digit is required.
-
-        :param self: Description
-        :return: Description
-        :rtype: bool
         """
 
         if not self.let_dig():
@@ -357,15 +455,15 @@ class Parser:
 
         if not self.match_chars("<"):
             self.rewind(start)
-            raise ParserError("path")
+            raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
 
         if not self.mailbox():
             self.rewind(start)
-            raise ParserError("path")
+            raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
 
         if not self.match_chars(">"):
             self.rewind(start)
-            raise ParserError("path")
+            raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
 
         return True
 
@@ -383,15 +481,15 @@ class Parser:
 
         if not self.local_part():
             self.rewind(start)
-            raise ParserError("mailbox")
+            raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
 
         if not self.match_chars("@"):
             self.rewind(start)
-            raise ParserError("mailbox")
+            raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
 
         if not self.domain():
             self.rewind(start)
-            raise ParserError("mailbox")
+            raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
 
         return True
 
@@ -420,7 +518,7 @@ class Parser:
         start = self.position
         if not self.is_char():
             self.rewind(start)
-            raise ParserError("string")
+            raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
 
         while self.is_char():
             pass
@@ -429,7 +527,7 @@ class Parser:
 
     def is_char(self) -> bool:
         """
-        Returns True if the current character is any ASCII character expect
+        Returns True if the current character is any ASCII character except
         those in <special> or those in <sp>.
 
         :param self: Description
@@ -491,14 +589,10 @@ class Parser:
         """
         According to the grammar, matches a single newline character, \n.
         I suppose we don't have to worry about \r.
-
-        :param self: Description
-        :return: Description
-        :rtype: bool
         """
         special_chars = set("\n")
         if not self.char_in_set(special_chars):
-            raise ParserError("CRLF")
+            raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
 
         return True
 
@@ -532,9 +626,7 @@ if __name__ == "__main__":
             print(line.strip())
             # Actually invoke the parser to start with the <mail-from-cmd> non-terminal
             parser.mail_from_cmd()
-            # parser.domain()
-            # If we reach here, the line was successfully parsed
-            print("Sender OK")
+
         except EOFError:
             # Ctrl+D (Unix) or end-of-file from a pipe
             break

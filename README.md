@@ -1,4 +1,18 @@
-# comp431-hw01
+# comp431-hw02
+
+## Tasks
+
+- Parse two additional SMTP messages
+- Change error/success reporting to use real SMTP mandated responses
+- Add server processing function
+  - read and process the SMTP messages to send an email message (including
+reading and processing the text of the message)
+  - save the contents of received messages in a file
+  - report errors when a "client" sends an email message incorrectly
+  - report when a client sends wrong/ill-formed SMTP messages or sends the
+  messages in the wrong order
+
+##
 
 ## Definitions
 
@@ -54,6 +68,10 @@ via the keyboard
   - the teacher emphasizes that **HW1** is a text-parsing assignment, not a
 networking assignment
 
+### The SMTP "RCPT TO" message
+
+
+
 ## Grammar
 
 The grammar specified for this assignment is written in what is called
@@ -67,12 +85,15 @@ combined.
 Terminals are "indivisible units of a language", or a token.
 
 ```text
+<rcpt-to-cmd> ::= "RCPT" <whitespace> "TO:" <nullspace> <forward-path> <nullspace> <CRLF>
+<data-cmd> ::= "DATA" <nullspace> <CRLF>
 <mail-from-cmd> ::= "MAIL" <whitespace> "FROM:" <nullspace> <reverse-path> <nullspace> <CRLF>
 <whitespace> ::= <SP> | <SP> <whitespace>
 <SP> ::= " " | "\t" | /* the space or tab character */
 <nullspace> ::= <null> | <whitespace>
 <null> :== no character
 <reverse-path> ::= <path>
+<forward-path> ::= <path>
 <path> ::= "<" <mailbox> ">"
 <mailbox> ::= <local-part> "@" <domain>
 <local-part> ::= <string>
