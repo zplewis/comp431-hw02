@@ -303,10 +303,7 @@ class Parser:
         if check_only:
             return True
 
-        self.nullspace()
-        self.forward_path()
-        self.nullspace()
-        if not self.crlf():
+        if not(self.nullspace() and self.forward_path() and self.nullspace() and not self.crlf()):
             raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
 
         # If we reach here, the line was successfully parsed
@@ -711,6 +708,7 @@ class Parser:
         if not self.match_chars("@"):
             self.rewind(start)
             return False
+
         if not self.domain():
             self.rewind(start)
             return False
