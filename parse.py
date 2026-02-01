@@ -5,6 +5,7 @@ Patrick Lewis for COMP 431 Spring 2026
 HW2: More Baby-steps Towards the Construction of an SMTP Server
 """
 
+from pathlib import Path
 import sys
 
 
@@ -883,6 +884,7 @@ class SMTPServer:
             # If we made it here, the command was fully parsed successfully
             # Add the "To: <forward-path>" line to the list of email text lines
             self.email_text.append(self.parser.get_to_line_for_email())
+            self.to_email_addresses.append(self.parser.get_email_address())
 
             # Only advance if this is the first time we are seeing a To: address
             if self.state == self.EXPECTING_RCPT_TO:
@@ -903,6 +905,7 @@ class SMTPServer:
             # This is different because any text that does not create an error that is parsed
             # here is considered valid until the ending comes.
             if self.parser.data_end_cmd():
+                self.process_email_message()
                 return self.advance()
 
             if self.parser.data_read_msg_line():
@@ -958,6 +961,42 @@ class SMTPServer:
 
         self.reset()
 
+    def create_folder(self, folder_name: str) -> Path:
+        """
+        Create a folder with the specified name in the same location as this
+        Python script.
+        """
+
+        if not folder_name:
+            raise ValueError("create_folder(); must specify a folder name")
+
+        # This is the folder that this Python script lives in.
+        current_folder = Path(__file__).resolve().parent
+        # This is the "forward" folder I want to create
+        new_folder = current_folder / folder_name
+
+        new_folder.mkdir(exist_ok=True)
+
+        return new_folder
+
+    def process_email_message(self) -> bool:
+        """
+        Docstring for process_email_message
+        """
+
+        # 1. Get the text of the message
+        email_complete_text = "\n".join(self.email_text)
+
+        # 2. Create the "folder" folder
+        self.create_folder("forward")
+
+        # 3. For each recipient of the latest email message, append the text
+        # of the email to a file with the email address as the name.
+        for email_address in self.to_email_addresses:
+            forward_path = Path(email_address)
+
+            with forward_path.open("a", encoding="utf-8") as f:
+                f.write(email_complete_text)
 
 
 if __name__ == "__main__":
@@ -977,7 +1016,6 @@ if __name__ == "__main__":
 
             # Pass this parser to the SMTPServer object
             server.set_parser(parser)
-
 
         except EOFError:
             # Ctrl+D (Unix) or end-of-file from a pipe
