@@ -1,62 +1,6 @@
-MAIL FROM:<jeffay@cs.unc.edu>
-MAIL FROM:< jeffay@cs.unc.edu>
-MAIL FROM:<jeff-ay@cs.unc.edu>
-MAIL FROM:<jeffay @cs.unc.edu>
-MAIL FROM:<jeffay@ cs.unc.edu>
-MAIL FROM:<jeffay@cs.unc.edu >
-MAIL FROM:<jeffay@cs.unc.edu
-MAIL.FROM:<jeffay@cs.unc.edu>
-MAIL FROM:<jeffay@cs.unc.edu>
-MAIL FROM:<jeffay@cs..unc.edu>
-MAIL FROM:<jeffay@cs.unc..edu>
-MAIL FROM:<jeffay@-cs.unc.edu>
-MAIL FROM:<jeffay@cs.unc.edu.>
-MAIL FROM:<1jeffay@cs.unc.edu>
-MAIL FROM:<_jeffay@cs.unc.edu>
-MAIL FROM:<Šebik@cs.unc.edu>
-MAIL FROM:<jeffay@cŠ.unc.edu>
-MAIL FROM:<jeffay@cs.uñc.edu>
- MAIL FROM:<jeffay@cs.unc.edu>
-MAIL FROM: <jeffay@cs.unc.edu>
-MAIL FROM :<jeffay@cs.unc.edu>
-MAIL FROM: <jeffay@cs.unc.edu>
-MAIL FROM:<jeffay@cs.unc.edu>
-MAIL FROM:<jeffay@cs. unc.edu>
-MAIL FROM:<jeffay@cs.u nc.edu>
-MAIL FROM:<
-MAIL FROM:<jeffay@1cs.unc.edu>
-MAIL FROM:<>
-MAIL FROM:-
-MAIL FROM:jeffay@cs.unc.edu
-MAIL FROM:<jeffay.cs.unc.edu>
-MAIL FROM:<j@csuncedu>
-MAIL FROM:<j@c>
-MAIL FROM:<J@C>
-MAIL FROM:<j@C>
-MAIL FROM:<->
-MAIL FROM:<j@-c.unc.edu>
-    MAIL FROM:<jeffay@cs.unc.edu>
-MAIL FROM:<jeffay@cs.unc.edu>
-mail from:<jeffay@cs.unc.edu>
- m
- M
-MAIL
-MAIL.
-MAIL FROM:
-MAIL FROM:<
-MAIL FROM:<jeffay
-MAIL FROM:jeffay
-MAIL FROM:jeffay@
-MAIL FROM:<jeffay@cs
-MAIL FROM:<jeffay@cs.>
-MAIL FROM:<jeffay@.unc.edu>
-MAIL FROM:<.jeffay@cs.unc.edu>
-MAIL FROM:<jeffay@cs>
-MAIL from:<jeffay@cs.unc.edu>
-MAIL FrOM:<jeffay@cs.unc.edu>
-MaIl FrOm:<jeffay@cs.unc.edu>
 MAILFROM: <jeffay@cs.unc.edu>
-RCPT TO : < bob@cs.unc.edu>
-MAIL FROM: <jeffay @cs.unc.edu>
-RCPT TO: < bob@cs.unc.edu
+MAIL FROM <jeffay@cs.unc.edu>
+RCPT TO : <bob@cs.unc.edu>
+MAIL  FROM: <jeffay @cs.unc.edu>
+RCPT TO: <bob@cs.unc.edu
 MAILFROM: <jeffay @cs.unc.edu>

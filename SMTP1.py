@@ -6,6 +6,7 @@ HW2: More Baby-steps Towards the Construction of an SMTP Server
 """
 
 from pathlib import Path
+import argparse
 import sys
 
 
@@ -72,6 +73,7 @@ class Parser:
         """
         self.input_string = input_string
 
+
         self.BEGINNING_POSITION = 0
         self.position = self.BEGINNING_POSITION
         """
@@ -133,27 +135,34 @@ class Parser:
     def check_for_commands(self) -> bool:
         """
         Checks the input string for known commands and sets the command_identified
-        flag and command_name accordingly.
+        flag and command_name accordingly. This function keeps up with the original position
+        and restores it after the checks are performed so that non-terminals are identified
+        correctly.
         """
 
+        start = self.position
         self.reset()
 
         # Check for MAIL FROM
         # The second part is not needed; if this non-terminal function returns true with
         # check_only=True, that means either the command was identified or identified and parsed.
         if self.mail_from_cmd(check_only=True):
+            self.rewind(start)
             return True
 
         self.reset()
         if self.rcpt_to_cmd(check_only=True):
+            self.rewind(start)
             return True
 
         self.reset()
         if self.data_cmd(check_only=True):
+            self.rewind(start)
             return True
 
         # This means no commands have been identified, which can mean a number of things but not
         # necessarily a problem (depending on the state of the SMTP Server)
+        self.rewind(start)
         return False
 
 
@@ -224,7 +233,7 @@ class Parser:
         Returns the current character that the parser is looking at.
         """
 
-        if self.position >= self.OUT_OF_BOUNDS:
+        if self.is_at_end():
             return ""
         return self.input_string[self.position]
 
@@ -244,7 +253,7 @@ class Parser:
         """
         return self.position >= self.OUT_OF_BOUNDS
 
-    def raise_parser_error(self, error_no: int, check_only: bool = False):
+    def raise_parser_error(self, error_no: int, check_only: bool = False) -> bool:
         """
         Raises a ParserError with the given error number if check_only is False.
         """
@@ -260,11 +269,8 @@ class Parser:
 
         <mail-from-cmd> ::= "MAIL" <whitespace> "FROM:" <nullspace> <reverse-path> <nullspace> <CRLF>
         """
-        if not self.match_chars("MAIL"):
-            self.raise_parser_error(ParserError.COMMAND_UNRECOGNIZED, check_only)
-        self.whitespace()
-        if not self.match_chars("FROM:"):
-            self.raise_parser_error(ParserError.COMMAND_UNRECOGNIZED, check_only)
+        if not (self.match_chars("MAIL") and self.whitespace() and self.match_chars("FROM:")):
+            return self.raise_parser_error(ParserError.COMMAND_UNRECOGNIZED, check_only)
         # Flag that the command has been identified
         self.set_command_identified("MAIL FROM")
 
@@ -280,18 +286,15 @@ class Parser:
         self.set_command_parsed()
         return self.print_success()
 
-    def rcpt_to_cmd(self, check_only: bool = False):
+    def rcpt_to_cmd(self, check_only: bool = False) -> bool:
         """
         The <rcpt-to-cmd> non-terminal handles the "RCPT TO:" command.
 
         <rcpt-to-cmd> ::= "RCPT" <whitespace> "TO:" <nullspace> <forward-path> <nullspace> <CRLF>
         """
 
-        if not self.match_chars("RCPT"):
-            raise ParserError(ParserError.COMMAND_UNRECOGNIZED)
-        self.whitespace()
-        if not self.match_chars("TO:"):
-            raise ParserError(ParserError.COMMAND_UNRECOGNIZED)
+        if not (self.match_chars("RCPT") and self.whitespace() and self.match_chars("TO:")):
+            return self.raise_parser_error(ParserError.COMMAND_UNRECOGNIZED, check_only)
 
         # Flag that the command has been identified
         self.set_command_identified("RCPT TO")
@@ -308,9 +311,9 @@ class Parser:
 
         # If we reach here, the line was successfully parsed
         self.set_command_parsed()
-        self.print_success()
+        return self.print_success()
 
-    def data_cmd(self, check_only: bool = False):
+    def data_cmd(self, check_only: bool = False) -> bool:
         """
         The <data-cmd> non-terminal handles the "DATA" command.
 
@@ -320,7 +323,7 @@ class Parser:
         # This is an example of a literal string in a production rule
         # If an error occurs here, it is a 500 error
         if not self.match_chars("DATA"):
-            raise ParserError(ParserError.COMMAND_UNRECOGNIZED)
+            return self.raise_parser_error(ParserError.COMMAND_UNRECOGNIZED, check_only)
 
         # Flag that the command has been identified
         self.set_command_identified("DATA")
@@ -329,13 +332,12 @@ class Parser:
         if check_only:
             return True
 
-        self.nullspace()
-        if not self.crlf():
+        if not (self.nullspace() and self.crlf()):
             raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
 
         # If we reach here, the line was successfully parsed
         self.set_command_parsed()
-        self.print_success(354)
+        return self.print_success(354)
 
     def data_read_msg_line(self):
         """
@@ -347,12 +349,16 @@ class Parser:
         # I think this should work because data_end_cmd() rewinds the position
         # if it fails to match.
         while not self.data_end_cmd():
+            # No need to continue if there are no more characters
+            if self.is_at_end():
+                break
             # What characters are allowed here?
             # There are no limits or constraints on what, how much text can be
             # entered after a correct DATA message other than we'll assume that
             # text is limited to printable text, whitespace, and newlines.
             if (not self.match_ascii_printable() and not self.whitespace()
                 and not self.crlf()):
+                # print(f"data_read_msg_line(); nothing matched...")
                 return False
 
         return True
@@ -403,11 +409,6 @@ class Parser:
     def is_ascii(self, char: str) -> bool:
         """
         Checks if a character is an ASCII character.
-
-        :param self: Description
-        :param char: The character to check.
-        :return: True if the character is ASCII, False otherwise.
-        :rtype: bool
         """
         if self.is_at_end():
             return False
@@ -420,13 +421,11 @@ class Parser:
         https://www.ascii-code.com/characters/printable-characters
 
         32 is space. <char> will omit space based on the rule.
-
-        :param self: Description
-        :param char: The character to check.
-        :return: True if the character is ASCII printable, False otherwise.
-        :rtype: bool
         """
         if self.is_at_end():
+            return False
+
+        if not char:
             return False
 
         return 32 <= ord(char) <= 126
@@ -438,9 +437,11 @@ class Parser:
         """
 
         if self.is_at_end():
+            # print(f"match_ascii_printable(); parser is at the end")
             return False
 
         if not self.is_ascii_printable(self.current_char()):
+            # print(f"match_ascii_printable(); current char is not printable: (#{ord(self.current_char())}), input_string length: {len(self.input_string)}, position: {self.position}")
             return False
 
         self.advance()
@@ -461,6 +462,13 @@ class Parser:
         self.position = new_position
 
         return True
+
+    def fast_forward(self, new_position: int) -> bool:
+        """
+        Fast-forwards the parser's position to a specified index. Alias for "rewind".
+        """
+
+        return self.rewind(new_position)
 
 
     def reset(self):
@@ -790,10 +798,6 @@ class Parser:
     def digit(self) -> bool:
         """
         Returns True if the current character is a digit (0-9).
-
-        :param self: Description
-        :return: Description
-        :rtype: bool
         """
 
         # WARNING: Do NOT use str.isdigit because it includes more than just 0-9!
@@ -806,11 +810,19 @@ class Parser:
         According to the grammar, matches a single newline character, \n.
         I suppose we don't have to worry about \r.
         """
-        special_chars = set("\n")
-        if not self.char_in_set(special_chars):
+        if self.is_at_end():
             return False
 
-        return True
+        special_chars = set("\n")
+        if self.char_in_set(special_chars):
+            return True
+
+        # 10 is carriage return in the ASCII table
+        # technically, the code should never reach here.
+        if ord(self.current_char()) == 10:
+            return True
+
+        return False
 
     def special(self) -> bool:
         """
@@ -832,17 +844,17 @@ class SMTPServer:
     Class that will operate like a state machine to keep track of what command
     is being handled next.
     """
-    # Call parser.mail_from_cmd() first
     EXPECTING_MAIL_FROM = 0
     EXPECTING_RCPT_TO = 1
     EXPECTING_RCPT_TO_OR_DATA = 2
     EXPECTING_DATA_END = 3
 
-    def __init__(self):
+    def __init__(self, debug_mode: bool = False):
         self.state = self.EXPECTING_MAIL_FROM
         self.to_email_addresses = []
         self.email_text = []
         self.parser = None
+        self.debug_mode = debug_mode
 
     def set_parser(self, current_parser: Parser):
         """
@@ -854,15 +866,33 @@ class SMTPServer:
         if not isinstance(current_parser, Parser):
             raise ValueError("parser must be an instance of Parser class.")
 
+    def add_text_to_email_body(self, text: str):
+        """
+        Add the input string without the trailing newline character to the list of lines that
+        will be appended to the message if the message parses correctly.
+        """
+
+        if not text:
+            return
+
+        self.email_text.append(text.strip())
+
+
+    def evaluate_state(self):
+        """
+        Determines what should happen
+        """
+        if not isinstance(self.parser, Parser):
+            raise ValueError("parser must be an instance of Parser class.")
+
         # Syntax errors in the message name (type 500 errors) should take precedence over all other
         # errors.
         # Out-of-order (type 503 errors) should take precedence over parameter/argument errors
         # (type 501 errors). This means that we can no longer throw a 501 error until we have
         # verified that the command is in the correct sequence.
 
-        # We need to know if any command is recognized
+        # We need to know if any command is recognized to be ready for 503 errors
         recognized_command = self.command_id_errors()
-        self.parser.reset()
 
         # STATE == 0
         if self.state == self.EXPECTING_MAIL_FROM:
@@ -872,7 +902,7 @@ class SMTPServer:
 
             # If we made it here, the command was fully parsed successfully
             # Add the "From: <reverse-path>" line to the list of email text lines
-            self.email_text.append(self.parser.get_from_line_for_email())
+            self.add_text_to_email_body(self.parser.get_from_line_for_email())
             return self.advance()
 
         if self.state == self.EXPECTING_RCPT_TO or \
@@ -883,7 +913,7 @@ class SMTPServer:
 
             # If we made it here, the command was fully parsed successfully
             # Add the "To: <forward-path>" line to the list of email text lines
-            self.email_text.append(self.parser.get_to_line_for_email())
+            self.add_text_to_email_body(self.parser.get_to_line_for_email())
             self.to_email_addresses.append(self.parser.get_email_address())
 
             # Only advance if this is the first time we are seeing a To: address
@@ -908,8 +938,13 @@ class SMTPServer:
                 self.process_email_message()
                 return self.advance()
 
-            if self.parser.data_read_msg_line():
-                self.email_text.append(self.parser.input_string)
+            # if an error occurs while reading a line meant for the body of the message, then
+            # throw an error. According to the writeup, "we'll assume that 'text' is limited to
+            # printable text, whitespace, and newlines".
+            if not self.parser.data_read_msg_line():
+                raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
+
+            self.add_text_to_email_body(self.parser.input_string)
 
     def command_id_errors(self) -> str:
         """
@@ -927,6 +962,9 @@ class SMTPServer:
 
         any_command_recognized = self.parser.check_for_commands()
         recognized_command = self.parser.get_command_name()
+
+        if self.debug_mode:
+            print(f"line: {self.parser.input_string.strip()}, state: {self.state}, recognized_command: {recognized_command}")
 
         if not any_command_recognized or not recognized_command:
             raise ParserError(ParserError.COMMAND_UNRECOGNIZED)
@@ -979,29 +1017,57 @@ class SMTPServer:
 
         return new_folder
 
-    def process_email_message(self) -> bool:
+    def process_email_message(self):
         """
-        Docstring for process_email_message
+        Takes the lines that make up the email message and appends them to the mailbox files in
+        the "forward" folder for each recipient of the current message (to_email_addresses).
         """
 
         # 1. Get the text of the message
         email_complete_text = "\n".join(self.email_text)
 
         # 2. Create the "folder" folder
-        self.create_folder("forward")
+        forward_folder = self.create_folder("forward")
 
         # 3. For each recipient of the latest email message, append the text
         # of the email to a file with the email address as the name.
         for email_address in self.to_email_addresses:
-            forward_path = Path(email_address)
+            forward_path = forward_folder / email_address
 
             with forward_path.open("a", encoding="utf-8") as f:
                 f.write(email_complete_text)
 
+def detect_debug_mode() -> bool:
+    """
+    Detects whether debug mode is enabled or not from the command line. Useful for debugging
+    without having to remove numerous print statements once things are working.
+    """
 
-if __name__ == "__main__":
+    arg_parser = argparse.ArgumentParser(description="HW2: More Baby-steps Towards the Construction of an SMTP Server")
+    # https://docs.python.org/3/library/argparse.html#argparse.ArgumentParser.add_argument
+    arg_parser.add_argument(
+        "--debug",
+        # https://docs.python.org/3/library/argparse.html#action
+        action="store_true",
+        help="Enable additional logging that is helpful for debugging without modifying code."
+    )
+    command_line_args = arg_parser.parse_args()
 
-    server = SMTPServer()
+    return command_line_args.debug
+
+def main():
+    """
+    The starting point for the entire script.
+    """
+
+    debug_mode = detect_debug_mode()
+
+    if debug_mode:
+        print("Debug mode enabled for this script.")
+
+    # Create an SMTPServer object to act as a state machine for processing lines and creating
+    # email messages.
+    server = SMTPServer(debug_mode)
 
     while True:
         try:
@@ -1009,13 +1075,20 @@ if __name__ == "__main__":
             # line = input()
             line = sys.stdin.readline()
             if not line or line == "":
+                if debug_mode:
+                    print("End-of-life is reached on the input stream. Stopping here.")
                 break
 
             # Create a Parser object to parse this line
             parser = Parser(line)
+            print(line.strip())
 
             # Pass this parser to the SMTPServer object
             server.set_parser(parser)
+
+            # Based on the current line, evaluate the state of the SMTP server and what should be
+            # done.
+            server.evaluate_state()
 
         except EOFError:
             # Ctrl+D (Unix) or end-of-file from a pipe
@@ -1024,9 +1097,17 @@ if __name__ == "__main__":
             # Ctrl+C
             break
         except ParserError as pe:
-            # "If a parsing error occurs, print it and continue to the next line."
+            # All errors that should be handled according to the writeup are handled as ParserError
+            # objects. All other exceptions are ValueError or some other type. If a ParserError
+            # occurrs, the write up says "upon receipt of any erroneous SMTP message you should
+            # reset your state machine and return to the state of waiting for a valid MAIL FROM
+            # message".
             print(pe)
+            server.reset()
             continue
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
             break
+
+if __name__ == "__main__":
+    main()

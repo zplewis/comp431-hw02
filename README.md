@@ -70,8 +70,6 @@ networking assignment
 
 ### The SMTP "RCPT TO" message
 
-
-
 ## Grammar
 
 The grammar specified for this assignment is written in what is called
