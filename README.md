@@ -11,8 +11,8 @@ reading and processing the text of the message)
   - report errors when a "client" sends an email message incorrectly
   - report when a client sends wrong/ill-formed SMTP messages or sends the
   messages in the wrong order
-
-##
+- start the state machine over (expecting a `MAIL FROM` message) upon any error
+occurring
 
 ## Definitions
 
