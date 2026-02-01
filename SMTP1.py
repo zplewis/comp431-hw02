@@ -1024,7 +1024,7 @@ class SMTPServer:
         """
 
         # 1. Get the text of the message
-        email_complete_text = "\n".join(self.email_text)
+        email_complete_text = "\n".join(self.email_text) + "\n"
 
         # 2. Create the "folder" folder
         forward_folder = self.create_folder("forward")
