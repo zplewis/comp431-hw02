@@ -7,68 +7,6 @@ HW2: More Baby-steps Towards the Construction of an SMTP Server
 
 import sys
 
-class ParserState:
-    """
-    Class that will operate like a state machine to keep track of what command
-    is being handled next.
-    """
-    # Call parser.mail_from_cmd() first
-    EXPECTING_MAIL_FROM = 0
-    EXPECTING_RCPT_TO = 1
-    EXPECTING_RCPT_TO_OR_DATA = 2
-    EXPECTING_DATA_END = 3
-
-    def __init__(self, parser: Parser = None):
-        self.state = ParserState.EXPECTING_MAIL_FROM
-        self.parser = parser
-        self.email_addresses = []
-        self.email_text = ""
-
-    def get_state(self) -> int:
-        return self.state
-
-    def add_email_address(self):
-        if self.state in (ParserState.EXPECTING_RCPT_TO, ParserState.EXPECTING_RCPT_TO_OR_DATA):
-            email_address = self.parser.get_email_address()
-            self.email_addresses.append(email_address)
-
-    def add_line_to_email(self):
-        # Deal with special lines first
-        if self.state == self.EXPECTING_MAIL_FROM:
-            from_line = self.parser.get_from_line_for_email()
-            self.add_email_address()
-            self.email_text += from_line + "\n"
-            return
-
-        if self.state in (self.EXPECTING_RCPT_TO, self.EXPECTING_RCPT_TO_OR_DATA):
-            # Stop here if we do not read a RCPT TO line
-            to_line = self.parser.get_to_line_for_email()
-            self.add_email_address()
-            self.email_text += to_line + "\n"
-            return
-
-        if self.state == self.EXPECTING_DATA_END and self.parser.rewind() and \
-            self.parser.data_end_cmd():
-            return
-
-        self.email_text += self.parser.input_string + "\n"
-
-    def is_cmd_expected(self) -> bool:
-        return self.state == ParserState.EXPECTING_MAIL_FROM or \
-        self.state == ParserState.EXPECTING_RCPT_TO or \
-        self.state == ParserState.EXPECTING_RCPT_TO_OR_DATA
-
-    def reset(self):
-        self.state = ParserState.EXPECTING_MAIL_FROM
-        self.email_addresses = []
-        self.email_text = ""
-
-    def advance(self):
-        if self.state < ParserState.EXPECTING_DATA_END:
-            self.state += 1
-            return
-
-        self.reset()
 
 
 class ParserError(Exception):
@@ -83,12 +21,12 @@ class ParserError(Exception):
     what message it's parsing), but some other error occurs on the line, a type
     501 error message is generated.
     """
+
+    COMMAND_UNRECOGNIZED = 500
+    SYNTAX_ERROR_IN_PARAMETERS = 501
+    BAD_SEQUENCE_OF_COMMANDS = 503
+
     def __init__(self, error_no: int):
-
-        self.COMMAND_UNRECOGNIZED = 500
-        self.SYNTAX_ERROR_IN_PARAMETERS = 501
-        self.BAD_SEQUENCE_OF_COMMANDS = 503
-
         self.error_no = error_no
 
         super().__init__(self.get_error_message())
@@ -98,10 +36,10 @@ class ParserError(Exception):
         Returns the error message corresponding to the error number.
         """
 
-        if self.error_no == 501:
+        if self.error_no == self.SYNTAX_ERROR_IN_PARAMETERS:
             return "501 Syntax error in parameters or arguments"
 
-        if self.error_no == 503:
+        if self.error_no == self.BAD_SEQUENCE_OF_COMMANDS:
             return "503 Bad sequence of commands"
 
         # Assume 500 for anything else
@@ -129,19 +67,47 @@ class Parser:
         """
         Constructor for the Parser class.
 
-        :param self: Description
         :param input_string: String from stdin to be parsed as a "MAIL FROM:" command.
         """
         self.input_string = input_string
-        """
-        The position of the "cursor", like in SQL, of the current character.
-        """
+
         self.BEGINNING_POSITION = 0
         self.position = self.BEGINNING_POSITION
         """
+        The position of the "cursor", like in SQL, of the current character.
+        """
+
+
+        self.OUT_OF_BOUNDS = len(input_string)
+        """
         A constant representing when the position has reached the end of the input string.
         """
-        self.OUT_OF_BOUNDS = len(input_string)
+
+        self.command_identified = False
+        """
+        A flag indicating whether the command has been identified. This does NOT mean that the
+        command has been successfully parsed; it only means that the parser has gotten past the
+        string literals at the beginning of the command line.
+        """
+
+        self.command_name = ""
+        """
+        The name of the command being parsed, e.g., "MAIL FROM", "RCPT TO", "DATA".
+        """
+
+    def get_command_name(self) -> str:
+        """
+        Returns the name of the command being parsed, e.g., "MAIL FROM", "RCPT TO", "DATA".
+        """
+
+        return self.command_name
+
+    def is_command_identified(self) -> bool:
+        """
+        Returns True if the command has been identified.
+        """
+
+        return self.command_identified
 
     def get_email_address(self) -> str:
         """
@@ -292,7 +258,9 @@ class Parser:
 
         # This means to loop until we match <CRLF>.<CRLF>, or until we
         # encounter an invalid character.
-        while not (self.crlf() and self.match_chars(".") and self.crlf()):
+        # I think this should work because data_end_cmd() rewinds the position
+        # if it fails to match.
+        while not self.data_end_cmd():
             # What characters are allowed here?
             # There are no limits or constraints on what, how much text can be
             # entered after a correct DATA message other than we'll assume that
@@ -307,19 +275,42 @@ class Parser:
     def data_end_cmd(self):
         """
         The <data-end-cmd> non-terminal handles the end of mail input,
-        represented by a line containing only a period. Keep in mind that
-        <data-cmd> has its own <CRLF> before this non-terminal.
+        represented by a line containing only a period. This non-terminal has
+        to work with both keyboard input and reading a file.
 
-        <data-end-cmd> ::= "." <CRLF>
+        If reading from a file, the line will only contain a period and a newline.
+        If reading from keyboard input, the user will type a period and press Enter.
+
+        Maybe it goes like this:
+        If the current position == 0 (beginning of a new line), and the next two characters are
+        a period and a newline, then we have matched <data-end-cmd>.
+
+        If the current position != 0, then we are not at the beginning of a new line. We can
+        check whether <CRLF> "." <CRLF> matches from the current position.
+
+        The reason this should work is because this function is not managing the state; it is
+        only reading from the current position. This means that the code calling this function
+        is responsible for calling it only after the "DATA" command has been successfully parsed.
+
+        <data-end-cmd> ::= <CRLF> "." <CRLF>
         """
 
         # The line must begin with a period and nothing else
         # The beginning of a new line implies <CRLF> as defined by the
         # production rule.
-        if not self.position == self.BEGINNING_POSITION:
-            return False
+        start = self.position
 
-        if not (self.match_chars(".") and self.crlf()):
+        if self.position == self.BEGINNING_POSITION:
+            if not (self.match_chars(".") and self.crlf()):
+                self.rewind(start)
+                return False
+
+            return self.print_success()
+
+        # If we are not at the beginning of a new line, then we need to check for
+        # <CRLF> "." <CRLF> from the current position.
+        if not (self.crlf() and self.match_chars(".") and self.crlf()):
+            self.rewind(start)
             return False
 
         return self.print_success()
@@ -392,6 +383,8 @@ class Parser:
         Resets the parser's position to the beginning of the input string.
         """
 
+        self.command_identified = False
+        self.command_name = ""
         return self.rewind(self.BEGINNING_POSITION)
 
     def match_chars(self, expected: str) -> bool:
@@ -456,7 +449,10 @@ class Parser:
 
     def forward_path(self):
         """
-        The function that handles the <forward-path> non-terminal.
+        The function that handles the <forward-path> non-terminal. I imagine
+        that this is a separate non-terminal in case it has to change later.
+
+        <forward-path> ::= <path>
         """
         return self.is_path()
 
@@ -467,7 +463,6 @@ class Parser:
         """
 
         start = self.position
-        original_start = self.position
 
         if not self.element():
             # print("Domain element failed")
@@ -477,15 +472,11 @@ class Parser:
         # Update the starting position since this succeeded!
         start = self.position
 
-        # print(f"element matched; current position is {self.position}, start: {start}, original_start: {original_start}, char is {self.current_char()}")
-
         if not self.match_chars("."):
             # Since there is no period, rewind and stop here
             # print("Domain period not found, rewinding")
             self.rewind(start)
             return True
-
-        # print(f"Domain period is found; saved position is {start}")
 
         # Since there is a period, see if there is another element. If not,
         # rewind again and return True. We are rewinding to before the period
@@ -747,6 +738,73 @@ class Parser:
         # quote.
         special_chars = set("<>()[]\\.,;:@\"")
         return self.char_in_set(special_chars)
+
+class ParserState:
+    """
+    Class that will operate like a state machine to keep track of what command
+    is being handled next.
+    """
+    # Call parser.mail_from_cmd() first
+    EXPECTING_MAIL_FROM = 0
+    EXPECTING_RCPT_TO = 1
+    EXPECTING_RCPT_TO_OR_DATA = 2
+    EXPECTING_DATA_END = 3
+
+    def __init__(self, current_parser: Parser):
+        self.state = ParserState.EXPECTING_MAIL_FROM
+        self.parser = current_parser
+        self.email_addresses = []
+        self.email_text = ""
+
+        if not current_parser:
+            raise ValueError("current_parser must be a valid Parser object.")
+
+    def get_state(self) -> int:
+        return self.state
+
+    def add_email_address(self):
+        if self.state in (ParserState.EXPECTING_RCPT_TO, ParserState.EXPECTING_RCPT_TO_OR_DATA):
+            email_address = self.parser.get_email_address()
+            self.email_addresses.append(email_address)
+
+    def add_line_to_email(self):
+        # Deal with special lines first
+        if self.state == self.EXPECTING_MAIL_FROM:
+            from_line = self.parser.get_from_line_for_email()
+            self.add_email_address()
+            self.email_text += from_line + "\n"
+            return
+
+        if self.state in (self.EXPECTING_RCPT_TO, self.EXPECTING_RCPT_TO_OR_DATA):
+            # Stop here if we do not read a RCPT TO line
+            to_line = self.parser.get_to_line_for_email()
+            self.add_email_address()
+            self.email_text += to_line + "\n"
+            return
+
+        if self.state == self.EXPECTING_DATA_END and self.parser.rewind() and \
+            self.parser.data_end_cmd():
+            return
+
+        self.email_text += self.parser.input_string + "\n"
+
+    def is_cmd_expected(self) -> bool:
+        return self.state == ParserState.EXPECTING_MAIL_FROM or \
+        self.state == ParserState.EXPECTING_RCPT_TO or \
+        self.state == ParserState.EXPECTING_RCPT_TO_OR_DATA
+
+    def reset(self):
+        self.state = ParserState.EXPECTING_MAIL_FROM
+        self.email_addresses = []
+        self.email_text = ""
+
+    def advance(self):
+        if self.state < ParserState.EXPECTING_DATA_END:
+            self.state += 1
+            return
+
+        self.reset()
+
 
 
 if __name__ == "__main__":
