@@ -1,5 +1,30 @@
 # comp431-hw02
 
+## Lessons Learned
+
+- Avoid using `.strip()` in Python as it removes whitespace that could be needed for valid input.
+- If you are using Visual Studio Code, make sure to diable the **Trim Trailing Whitespace** setting
+as it modifies lines upon saving and removing trailing whitespace (tabs, spaces) that may need to
+be there.
+
+```json
+{
+"files.trimTrailingWhitespace": false
+}
+```
+
+- Check the error messages to make sure that you have them exactly right, each and every character.
+With error code 500, I had a comma instead of a colon, which was incorrect.
+- When echoing the user's input, use `sys.stdout.write()` instead of print as it adds a newline
+character. It's fine to use print for printing error and success messages because they are generated
+by the program.
+- There is a way to pipe output of the program to a file and pipe in a test file and enable debug
+mode all at the same time:
+
+```bash
+python3 ./SMTP1.py --debug < submission1tests > output2.txt 2>&1
+```
+
 ## Tasks
 
 - Parse two additional SMTP messages

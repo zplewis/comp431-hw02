@@ -1,0 +1,11 @@
+mail from:<sender@test.com>
+
+MAIL FROM:<sender@test.com>
+RCPT TO:<recipient@test.com>
+DATA extra
+
+MAIL FROM:<sender@test.com>
+RCPT TO:<recipient@test.com>
+DATA
+Message body.
+.

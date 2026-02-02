@@ -45,7 +45,7 @@ class ParserError(Exception):
             return "503 Bad sequence of commands"
 
         # Assume 500 for anything else
-        return "500 Syntax error, command unrecognized"
+        return "500 Syntax error: command unrecognized"
 
 
 class Parser:
@@ -65,7 +65,7 @@ class Parser:
     Based on the HW1 writeup,
     """
 
-    def __init__(self, input_string: str):
+    def __init__(self, input_string: str, debug_mode: bool = False):
         """
         Constructor for the Parser class.
 
@@ -102,6 +102,12 @@ class Parser:
         """
         A flag indicating whether the command has been successfully parsed. To reiterate, a command
         can be identified but not successfully parsed.
+        """
+
+        self.debug_mode = debug_mode
+        """
+        If True, print additional statements that help with debugging. Turned off by default to
+        prevent changing the output for grading.
         """
 
     def set_command_parsed(self):
@@ -164,6 +170,31 @@ class Parser:
         # necessarily a problem (depending on the state of the SMTP Server)
         self.rewind(start)
         return False
+    
+    def get_input_line_raw(self) -> str:
+        """
+        Get the exact string passed to the parser.
+        """
+
+        return self.input_string
+    
+    def get_input_line(self) -> str:
+        """
+        Docstring for get_input_line
+        
+        :param self: Description
+        :return: Description
+        :rtype: str
+        """
+
+        if self.debug_mode:
+            print(f"original: {self.input_string}")
+            print(f"sliced: {self.input_string[:-1]}")
+
+        if not self.input_string.endswith("\n"):
+            return self.input_string
+        
+        return self.input_string[:-1]
 
 
     def get_email_address(self) -> str:
@@ -196,16 +227,7 @@ class Parser:
         Assumes that the line has already been successfully parsed.
         """
 
-        # I think there is an easy way to do this without rewinding the parser.
         return self.get_address_line_for_email("FROM:")
-        # from_literal = "FROM:"
-
-        # if not self.is_at_end() or from_literal not in self.input_string:
-        #     raise ValueError("Input string does not contain 'FROM:' literal.")
-
-        # start_index = self.input_string.find(from_literal) + len(from_literal)
-        # end_index = self.input_string.find(">", start_index) + 1
-        # return f"From: {self.input_string[start_index:end_index].strip()}"
 
     def get_to_line_for_email(self) -> str:
         """
@@ -303,7 +325,7 @@ class Parser:
         if check_only:
             return True
 
-        if not(self.nullspace() and self.forward_path() and self.nullspace() and not self.crlf()):
+        if not(self.nullspace() and self.forward_path() and self.nullspace() and self.crlf()):
             raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
 
         # If we reach here, the line was successfully parsed
@@ -353,8 +375,8 @@ class Parser:
             # There are no limits or constraints on what, how much text can be
             # entered after a correct DATA message other than we'll assume that
             # text is limited to printable text, whitespace, and newlines.
-            if (not self.match_ascii_printable() and not self.whitespace()
-                and not self.crlf()):
+            if not (self.match_ascii_printable() or self.whitespace()
+                or self.crlf()):
                 # print(f"data_read_msg_line(); nothing matched...")
                 return False
 
@@ -868,12 +890,15 @@ class SMTPServer:
         """
         Add the input string without the trailing newline character to the list of lines that
         will be appended to the message if the message parses correctly.
+
+        Note to self: .strip() is too greedy and will remove trailing and leading spaces and tabs,
+        changing the original content of each line passed to the parser.
+
+        Another note to self: if this function is called, just do it; do not try to prevent an
+        empty string from being sent to the email message.
         """
 
-        if not text:
-            return
-
-        self.email_text.append(text.strip())
+        self.email_text.append(text)
 
 
     def evaluate_state(self):
@@ -942,7 +967,7 @@ class SMTPServer:
             if not self.parser.data_read_msg_line():
                 raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
 
-            self.add_text_to_email_body(self.parser.input_string)
+            self.add_text_to_email_body(self.parser.get_input_line())
 
     def command_id_errors(self) -> str:
         """
@@ -1007,10 +1032,12 @@ class SMTPServer:
             raise ValueError("create_folder(); must specify a folder name")
 
         # This is the folder that this Python script lives in.
-        current_folder = Path(__file__).resolve().parent
+        # I got this wrong the first time; this should be in the "current working directory" (p. 6)
+        current_folder = Path.cwd()
         # This is the "forward" folder I want to create
         new_folder = current_folder / folder_name
 
+        # it's okay if the folder already exists
         new_folder.mkdir(exist_ok=True)
 
         return new_folder
@@ -1078,8 +1105,10 @@ def main():
                 break
 
             # Create a Parser object to parse this line
-            parser = Parser(line)
-            print(line.strip())
+            parser = Parser(line, debug_mode=debug_mode)
+            # Apparently, print() was printing an extra line
+            sys.stdout.write(line)
+            sys.stdout.flush()
 
             # Pass this parser to the SMTPServer object
             server.set_parser(parser)

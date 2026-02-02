@@ -1,0 +1,60 @@
+mail from:<sender@test.com>
+MAIL FROM:<sender@test.com>
+RCPT TO:<recipient@test.com>
+DATA extra
+MAIL FROM:<sender@test.com>
+RCPT TO:<recipient@test.com>
+DATA
+Message body.
+.
+MAIL FROM:<sender@test.com>
+RCPT TO:<recipient@test.com>
+DATA
+  leading spaces line (should be preserved EXACTLY)
+	leading TAB line (should be preserved EXACTLY)
+line with trailing spaces should be preserved EXACTLY    
+line containing a dot but not terminator: hello.world
+.
+MAIL FROM:<sender@test.com>
+RCPT TO:<recipient@test.com>
+DATA
+First line
+
+Third line after a blank line (blank line above must be echoed/preserved)
+.
+MAIL FROM:<sender@test.com>
+RCPT TO:<recipient@test.com>
+DATA
+.
+MAIL FROM:<sender@test.com>
+RCPT TO:<recipient@test.com>
+DATA
+..this line starts with two dots (should NOT terminate)
+.
+RCPT TO:<recipient@test.com>
+MAIL FROM:<sender@test.com>
+MAIL FROM:<sender@test.com>
+RCPT TO:<recipient@test.com>
+DATA
+DATA
+MAIL FROM:<sender@test.com>
+RCPT TO:<recipient@test.com>
+DATA
+Body after prior errors; should still work.
+.
+MAIL FROM:<sender@test.com>
+RCPT TO:<recipient@test.com>
+RCPT TO:<recipient2@test.com>
+DATA
+Multiple recipients should be accepted.
+.
+MAIL FROM:<sender@test.com>
+RCPT TO:<recipient@test.com>
+DATA
+Trailing spaces on terminator line should NOT be accepted as terminator
+.    
+MAIL FROM:<sender@test.com>
+RCPT TO:<recipient@test.com>
+DATA
+Now a clean terminator:
+.
