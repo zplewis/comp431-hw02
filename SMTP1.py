@@ -551,6 +551,9 @@ class Parser:
 
         :param self: Description
         """
+        
+        if self.is_at_end():
+            return True
 
         while self.sp():
             pass
@@ -596,7 +599,7 @@ class Parser:
             return True
 
         # Since there is a period, see if there is another element. If not,
-        # rewind again and return True. We are rewinding to before the period
+        # rewind again and return False. We are rewinding to before the period
         # since the period by itself is not enough for the "right-side" of the
         # "or" operator in the <domain> non-terminal. Calling this checks
         # for another element after the period.
