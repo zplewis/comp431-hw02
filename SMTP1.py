@@ -351,7 +351,7 @@ class Parser:
         if check_only:
             return True
 
-        if not (self.nullspace() and self.crlf()):
+        if not (self.crlf()):
             raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
 
         # If we reach here, the line was successfully parsed
