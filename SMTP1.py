@@ -953,7 +953,7 @@ class SMTPServer:
         if self.state == self.EXPECTING_RCPT_TO_OR_DATA:
             # This means that the recognized command must be "DATA", but we'll check anyway
             if recognized_command == "DATA" and not self.parser.data_cmd():
-                raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
+                raise ParserError(ParserError.COMMAND_UNRECOGNIZED)
 
             # If we made it here, the command was fully parsed successfully
             # Advance so that we can start reading the message
