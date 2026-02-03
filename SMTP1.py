@@ -336,7 +336,7 @@ class Parser:
         """
         The <data-cmd> non-terminal handles the "DATA" command.
 
-        <data-cmd> ::= "DATA" <nullspace> <CRLF>
+        <data-cmd> ::= "DATA" <CRLF>
         """
 
         # This is an example of a literal string in a production rule
