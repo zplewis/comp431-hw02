@@ -170,18 +170,18 @@ class Parser:
         # necessarily a problem (depending on the state of the SMTP Server)
         self.rewind(start)
         return False
-    
+
     def get_input_line_raw(self) -> str:
         """
         Get the exact string passed to the parser.
         """
 
         return self.input_string
-    
+
     def get_input_line(self) -> str:
         """
         Docstring for get_input_line
-        
+
         :param self: Description
         :return: Description
         :rtype: str
@@ -193,7 +193,7 @@ class Parser:
 
         if not self.input_string.endswith("\n"):
             return self.input_string
-        
+
         return self.input_string[:-1]
 
 
@@ -334,9 +334,11 @@ class Parser:
 
     def data_cmd(self, check_only: bool = False) -> bool:
         """
-        The <data-cmd> non-terminal handles the "DATA" command.
+        The <data-cmd> non-terminal handles the "DATA" command. Note that the DATA command
+        does NOT have any arguments, so it cannot generate a 501 (SYNTAX_ERROR_IN_PARAMTERS)
+        error!
 
-        <data-cmd> ::= "DATA" <CRLF>
+        <data-cmd> ::= "DATA" <nullspace> <CRLF>
         """
 
         # This is an example of a literal string in a production rule
@@ -347,12 +349,12 @@ class Parser:
         # Flag that the command has been identified
         self.set_command_identified("DATA")
 
-        # If we are only checking for command recognition, we can stop here and return
+        if not (self.nullspace() and self.crlf()):
+            return self.raise_parser_error(ParserError.COMMAND_UNRECOGNIZED, check_only)
+
+         # If we are only checking for command recognition, we can stop here and return
         if check_only:
             return True
-
-        if not (self.crlf()):
-            raise ParserError(ParserError.SYNTAX_ERROR_IN_PARAMETERS)
 
         # If we reach here, the line was successfully parsed
         self.set_command_parsed()
@@ -551,7 +553,7 @@ class Parser:
 
         :param self: Description
         """
-        
+
         if self.is_at_end():
             return True
 
